@@ -143,11 +143,6 @@ const MainContent = ({ isExpired, onTimerExpired, onPaymentSuccess, lastPaymentT
           <div className="amount">
             THANK FOR DONATION<span className="currency"></span>
           </div>
-          {lastPaymentTime && (
-            <div className="payment-time">
-              Received at {lastPaymentTime.toLocaleTimeString()}
-            </div>
-          )}
         </div>
       )}
 
