@@ -12,5 +12,7 @@
   { "name": "EAN PHANET",
     "amount": 1.25 },
   { "name": "LONG PISETH",
-    "amount":5.00 }
+    "amount":5.00 },
+  { "name": "HENG MENGHUY",
+    "amount":2.10 }
 ]
