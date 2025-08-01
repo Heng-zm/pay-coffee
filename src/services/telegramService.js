@@ -32,9 +32,6 @@ export const sendTelegramMessage = async (message, options = {}) => {
 
     const response = await axios.post(url, data);
     
-    if (config.debug) {
-      console.log('Telegram message sent successfully:', response.data);
-    }
     
     return response.data;
   } catch (error) {

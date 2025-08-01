@@ -129,22 +129,5 @@ export const validateConfig = () => {
 };
 
 // Debug configuration (only in development)
-if (config.debug && config.isDevelopment) {
-  console.log('App Configuration:', {
-    environment: config.environment,
-    payment: {
-      aba: { url: config.payment.aba.url },
-      acleda: { 
-        url: config.payment.acleda.url,
-        hasPaymentData: !!config.payment.acleda.paymentData 
-      }
-    },
-    api: {
-      baseUrl: config.api.baseUrl,
-      endpoints: config.api.endpoints
-    },
-    app: config.app
-  });
-}
 
 export default config;

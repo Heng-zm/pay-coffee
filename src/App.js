@@ -64,13 +64,11 @@ function App() {
   const handleTimerExpired = useCallback(() => {
     setIsExpired(true);
     setAppTheme('expired');
-    console.log('Payment timer has expired');
   }, []);
-
+  
   // Payment success handler
   const handlePaymentSuccess = useCallback((paymentData) => {
     setLastPaymentTime(new Date());
-    console.log('Payment successful:', paymentData);
   }, []);
 
 

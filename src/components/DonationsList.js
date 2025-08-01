@@ -33,7 +33,6 @@ const DonationsList = ({ isExpired, isOnline }) => {
       if (!response.ok) {
         console.warn(`Failed to fetch ${jsonUrl}: ${response.status} ${response.statusText}.`);
         if (response.status === 404) {
-          console.log("Supporters file (supporters.json) not found.");
         } else {
           console.error(`Server error ${response.status} fetching supporters file.`);
         }
@@ -60,7 +59,6 @@ const DonationsList = ({ isExpired, isOnline }) => {
       
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.log('Donations fetch was aborted');
         return;
       }
       console.error('Error loading or parsing donations:', error);

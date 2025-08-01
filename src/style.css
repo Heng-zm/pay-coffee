@@ -72,6 +72,42 @@
     --telegram-focus-shadow: rgba(0, 136, 204, 0.25);
 }
 
+/* Media Queries for Responsive Design */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .content {
+        padding: 15px;
+    }
+    .donations-list-section {
+        padding: 10px;
+    }
+    .social-link {
+        width: 100%;
+        justify-content: center;
+    }
+    .bank-scanner-link {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .header {
+        padding: 10px;
+    }
+    .title {
+        font-size: 1.2em;
+    }
+    .timer {
+        font-size: 0.8em;
+    }
+    .amount {
+        font-size: 1em;
+    }
+}
+
 /* Basic Reset & Body Styles */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { /* No smooth scroll needed */ }
@@ -91,6 +127,7 @@ body {
     background-color: var(--bg-container); width: 100%; max-width: 400px;
     border-radius: var(--border-radius-container); box-shadow: var(--shadow-main);
     overflow: hidden; display: flex; flex-direction: column; margin-left: auto; margin-right: auto;
+    margin: 0 10px; /* Add some margin on mobile */
 }
 
 /* Initial Hidden State for Animated Elements */

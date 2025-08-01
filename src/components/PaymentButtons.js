@@ -13,11 +13,9 @@ const PaymentButtons = React.memo(({ isExpired, onPaymentSuccess, onPaymentStart
     if (isExpired || !isOnline || paymentInProgress) {
       event.preventDefault();
       const reason = isExpired ? 'expired' : !isOnline ? 'offline' : 'payment in progress';
-      console.log(`Action blocked: Button (${buttonId}) clicked when ${reason}.`);
       return;
     }
     
-    console.log(`Action initiated: Button (${buttonId}) clicked. Href: ${href}`);
     
     // Notify payment start
     if (onPaymentStart) {
