@@ -14,5 +14,7 @@
   { "name": "LONG PISETH",
     "amount":5.00 },
   { "name": "HENG MENGHUY",
-    "amount":2.10 }
+    "amount":2.10 },
+  { "name": "HUN SENGLY",
+    "amount":0.10 }
 ]
