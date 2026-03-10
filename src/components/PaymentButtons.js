@@ -12,10 +12,8 @@ const PaymentButtons = React.memo(({ isExpired, onPaymentSuccess, onPaymentStart
   const handleButtonClick = useCallback((buttonId, href, event) => {
     if (isExpired || !isOnline || paymentInProgress) {
       event.preventDefault();
-      const reason = isExpired ? 'expired' : !isOnline ? 'offline' : 'payment in progress';
       return;
     }
-    
     
     // Notify payment start
     if (onPaymentStart) {
