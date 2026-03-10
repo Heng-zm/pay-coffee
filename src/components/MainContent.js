@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Timer from './Timer';
 import QRCode from './QRCode';
 import PaymentButtons from './PaymentButtons';
@@ -76,14 +76,6 @@ const MainContent = ({ isExpired, onTimerExpired, onPaymentSuccess, lastPaymentT
       }
     };
   }, []);
-
-  // Memoize recipient name to prevent unnecessary re-renders
-  const recipientName = useMemo(() => config.app.recipientName, []);
-  
-  // Memoize container class names
-  const containerClasses = useMemo(() => {
-    return `content ${isLoading ? 'loading' : 'loaded'} ${isExpired ? 'expired' : ''} ${!isOnline ? 'offline' : ''}`;
-  }, [isLoading, isExpired, isOnline]);
 
   if (isLoading) {
     return (
