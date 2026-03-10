@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import MainContent from './components/MainContent';
 import DonationsList from './components/DonationsList';
@@ -10,7 +10,6 @@ import './style.css';
 function App() {
   // Refs for cleanup and performance
   const notificationSentRef = useRef(false);
-  const onlineStatusInitialized = useRef(false);
   
   // Core app state management
   const [isExpired, setIsExpired] = useState(false);
@@ -70,7 +69,6 @@ function App() {
   const handlePaymentSuccess = useCallback((paymentData) => {
     setLastPaymentTime(new Date());
   }, []);
-
 
   // Handle online/offline status
   useEffect(() => {
