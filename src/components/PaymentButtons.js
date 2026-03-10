@@ -21,11 +21,10 @@ const PaymentButtons = React.memo(({ isExpired, onPaymentSuccess, onPaymentStart
     }
     
     // Simulate payment success after a delay (in real app, this would be triggered by payment confirmation)
-    // This is just for demonstration - remove in production
     if (onPaymentSuccess) {
       setTimeout(() => {
         onPaymentSuccess({ buttonId, amount: 5.00 }); // Mock payment data
-      }, 2000); // Simulate 2 second payment processing
+      }, 2000);
     }
   }, [isExpired, isOnline, paymentInProgress, onPaymentSuccess, onPaymentStart]);
   
@@ -53,7 +52,8 @@ const PaymentButtons = React.memo(({ isExpired, onPaymentSuccess, onPaymentStart
           disabled={isButtonDisabled}
           type="button"
         >
-          <img className="bank-icon" src={abaIcon} alt="ABA Bank Icon" loading="lazy" />
+          {/* OPTIMIZED IMAGE */}
+          <img className="bank-icon" src={abaIcon} alt="ABA Bank Icon" width="39" height="39" loading="lazy" decoding="async" />
           <span>ABA PAY</span>
         </button>
       ) : (
@@ -64,7 +64,8 @@ const PaymentButtons = React.memo(({ isExpired, onPaymentSuccess, onPaymentStart
           aria-label="Pay with ABA Bank"
           onClick={(e) => handleButtonClick('open-aba-scanner-btn', abaUrl, e)}
         >
-          <img className="bank-icon" src={abaIcon} alt="ABA Bank Icon" loading="lazy" />
+          {/* OPTIMIZED IMAGE */}
+          <img className="bank-icon" src={abaIcon} alt="ABA Bank Icon" width="39" height="39" loading="lazy" decoding="async" />
           <span>ABA PAY</span>
         </a>
       )}
@@ -79,7 +80,8 @@ const PaymentButtons = React.memo(({ isExpired, onPaymentSuccess, onPaymentStart
           disabled={isButtonDisabled}
           type="button"
         >
-          <img className="bank-icon" src={acledaIcon} alt="ACLEDA Bank Icon" loading="lazy" />
+          {/* OPTIMIZED IMAGE */}
+          <img className="bank-icon" src={acledaIcon} alt="ACLEDA Bank Icon" width="39" height="39" loading="lazy" decoding="async" />
           <span>ACLEDA PAY</span>
         </button>
       ) : (
@@ -90,7 +92,8 @@ const PaymentButtons = React.memo(({ isExpired, onPaymentSuccess, onPaymentStart
           aria-label="Pay with ACLEDA Bank"
           onClick={(e) => handleButtonClick('open-acleda-scanner-btn', acledaUrl, e)}
         >
-          <img className="bank-icon" src={acledaIcon} alt="ACLEDA Bank Icon" loading="lazy" />
+          {/* OPTIMIZED IMAGE */}
+          <img className="bank-icon" src={acledaIcon} alt="ACLEDA Bank Icon" width="39" height="39" loading="lazy" decoding="async" />
           <span>ACLEDA PAY</span>
         </a>
       )}
