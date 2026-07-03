@@ -4,15 +4,14 @@
  *
  * Security:
  * - Payment links and image URLs are public and safe for React env vars.
- * - Never put TELEGRAM_BOT_TOKEN, bot admin IDs, or any private key in React.
- * - Website-open Telegram notifications must go through your backend endpoint.
+ * - Never put TELEGRAM_BOT_TOKEN, chat IDs, or any private key in React.
+ * - Website-open Telegram notifications use the same-origin /api/website/visit
+ *   Vercel serverless function, so no separate backend server is required.
  */
 
 const DEFAULT_ABA_PAYMENT_URL = 'https://pay.ababank.com/oRF8/46g8eilb';
 const DEFAULT_WING_PAYMENT_URL = 'https://wingmoney.app.link/Ir9xtksOs4b';
 const DEFAULT_ACLEDA_PAYMENT_URL = 'https://acledabank.com.kh/acleda?payment_data=qWY5B2SAUfIhLblxzOtfu5ckLzMHjaSki6Ru0bsOyNK+ylPBgZ0sHH6BeGUscKoEaK6msRM5QuN4T4WvLq020epHT+1WVUtpGCJww3z3aBbPU5LTa09U4Zu9tLeWNUNQnRD7vTxOdM8auhzZmg63PYThaYmyhlmDqJK2hc3hEEU0bJem9tWLx2aNrjGQd0/cPHZptX2v3GDs729jsB9oFdFwP2Hv+8k64jKEArZgUIGuhVdBSU1urPG3y444m/Vo&key=khqr';
-const DEFAULT_LOCAL_BACKEND_URL = 'http://127.0.0.1:8000';
-
 const trimTrailingSlash = (value = '') => String(value || '').replace(/\/+$/, '');
 const ensureLeadingSlash = (value = '') => (String(value).startsWith('/') ? String(value) : `/${value}`);
 const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
@@ -26,15 +25,6 @@ const parsePositiveInt = (value, fallback, min = 1) => {
 
 const isBrowser = () => typeof window !== 'undefined' && !!window.location;
 
-const isPrivateLanHost = (hostname = '') => (
-  /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
-  || /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)
-  || /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname)
-);
-
-const getLocalBackendPort = () => (
-  String(process.env.REACT_APP_LOCAL_BACKEND_PORT || '8000').replace(/\D/g, '') || '8000'
-);
 
 const getDefaultApiBaseUrl = () => {
   const explicit = process.env.REACT_APP_API_BASE_URL;
@@ -42,26 +32,10 @@ const getDefaultApiBaseUrl = () => {
 
   if (!isBrowser()) return '';
 
-  const { protocol, hostname, port, origin } = window.location;
-  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
-  const isLanHost = isPrivateLanHost(hostname);
-  const isFrontendDevPort = ['3000', '3001', '5173', '5174'].includes(String(port || ''));
+  const { protocol, hostname, origin } = window.location;
 
-  // Smooth local dev: React usually runs on 3000/5173 and the FastAPI backend
-  // example runs on 8000. This removes one common setup mistake.
-  if (isLocalHost && isFrontendDevPort) {
-    return DEFAULT_LOCAL_BACKEND_URL;
-  }
-
-  // LAN/mobile dev: when React is opened from another device or local network
-  // URL like http://192.168.18.11:3000, call the backend on the same host but
-  // port 8000 instead of incorrectly requesting /api/* from the React dev server.
-  if (isLanHost && isFrontendDevPort) {
-    return `${protocol}//${hostname}:${getLocalBackendPort()}`;
-  }
-
-  // In production, same-origin works when backend and frontend are deployed
-  // together. For separated deployments, set REACT_APP_API_BASE_URL.
+  // No separate FastAPI/Node server required. By default the frontend calls the
+  // same site origin, so Vercel can handle /api/* with serverless functions.
   return trimTrailingSlash(origin || `${protocol}//${hostname}`);
 };
 
@@ -139,7 +113,7 @@ const config = {
   api: {
     baseUrl: getDefaultApiBaseUrl(),
     endpoints: {
-      // Backend example returns { ok: true, supporters: [...] } from /api/supporters.
+      // Optional endpoint. For a fully static setup, leave it unavailable and the UI will use cached/empty supporters.
       supporters: normalizeEndpoint(
         process.env.REACT_APP_SUPPORTERS_ENDPOINT || process.env.REACT_APP_DONATIONS_ENDPOINT,
         '/api/supporters'

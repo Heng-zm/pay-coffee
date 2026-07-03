@@ -3,8 +3,8 @@
  *
  * Security note:
  * Never put a Telegram bot token in React/REACT_APP_* variables. This file sends
- * website events to your own private backend endpoint. The backend should hold
- * TELEGRAM_BOT_TOKEN and forward the message to Telegram.
+ * website events to the same-origin /api/website/visit endpoint. On Vercel, that
+ * endpoint is a serverless function that keeps TELEGRAM_BOT_TOKEN private.
  */
 
 import config from '../config/config';
@@ -349,7 +349,7 @@ export const sendNotificationEvent = async (eventName, payload = {}, options = {
 
   if (!config.notifications?.enabled || !endpoint) {
     if (config.debug) {
-      console.info('Telegram notifications are disabled. Set REACT_APP_NOTIFICATION_ENDPOINT and REACT_APP_NOTIFICATIONS_ENABLED=true.');
+      console.info('Telegram notifications are disabled. Set REACT_APP_NOTIFICATIONS_ENABLED=true and deploy api/website/visit.js with TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.');
     }
     return false;
   }
