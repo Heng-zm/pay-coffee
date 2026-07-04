@@ -1,145 +1,87 @@
-const MAX_BODY_BYTES = 32 * 1024;
+const TELEGRAM_API_BASE = 'https://api.telegram.org';
+const MAX_TEXT_LENGTH = 3900;
 
-const jsonResponse = (res, statusCode, data) => {
-  res.statusCode = statusCode;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(data));
+const escapeHtml = (value = '') => String(value)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
+const trimValue = (value, max = 700) => {
+  const text = String(value ?? '').trim();
+  if (text.length <= max) return text || 'Unknown';
+  return `${text.slice(0, max - 1)}…`;
 };
 
-const getAllowedOrigins = () => (
-  String(process.env.FRONTEND_ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean)
-);
-
-const setCorsHeaders = (req, res) => {
-  const origin = req.headers.origin;
-  const allowedOrigins = getAllowedOrigins();
-
-  if (origin && (allowedOrigins.length === 0 || allowedOrigins.includes(origin))) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
+const getClientIp = (request) => {
+  const forwardedFor = request.headers['x-forwarded-for'];
+  if (typeof forwardedFor === 'string' && forwardedFor.trim()) {
+    return forwardedFor.split(',')[0].trim();
   }
 
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  return request.headers['x-real-ip'] || request.socket?.remoteAddress || 'Unknown';
 };
 
-const readRawBody = (req) => new Promise((resolve, reject) => {
-  if (req.body && typeof req.body === 'object') {
-    resolve(req.body);
-    return;
-  }
+const isAllowedOrigin = (request) => {
+  const allowedOrigin = process.env.WEBSITE_VISIT_ALLOWED_ORIGIN || process.env.APP_ORIGIN || '';
+  if (!allowedOrigin) return true;
 
-  if (typeof req.body === 'string') {
-    try {
-      resolve(JSON.parse(req.body));
-    } catch (error) {
-      reject(new Error('Invalid JSON body'));
-    }
-    return;
-  }
+  const origin = request.headers.origin || '';
+  return origin === allowedOrigin;
+};
 
-  let raw = '';
-  req.on('data', (chunk) => {
-    raw += chunk;
-    if (Buffer.byteLength(raw, 'utf8') > MAX_BODY_BYTES) {
-      reject(new Error('Request body is too large'));
-      req.destroy();
+const parseBody = (request) => new Promise((resolve, reject) => {
+  let data = '';
+
+  request.on('data', (chunk) => {
+    data += chunk;
+    if (data.length > 32 * 1024) {
+      reject(new Error('Payload too large'));
+      request.destroy();
     }
   });
 
-  req.on('end', () => {
-    if (!raw) {
+  request.on('end', () => {
+    if (!data) {
       resolve({});
       return;
     }
 
     try {
-      resolve(JSON.parse(raw));
-    } catch (error) {
+      resolve(JSON.parse(data));
+    } catch (_error) {
       reject(new Error('Invalid JSON body'));
     }
   });
 
-  req.on('error', reject);
+  request.on('error', reject);
 });
 
-const binaryToJson = (binaryString = '') => {
-  if (!/^[01]+$/.test(binaryString) || binaryString.length % 8 !== 0) {
-    throw new Error('Invalid binary payload');
-  }
-
-  const bytes = [];
-  for (let index = 0; index < binaryString.length; index += 8) {
-    bytes.push(parseInt(binaryString.slice(index, index + 8), 2));
-  }
-
-  return JSON.parse(Buffer.from(bytes).toString('utf8'));
-};
-
-const extractEventPayload = (body = {}) => {
-  if (body.encrypted && body.encryption === 'binary-json-v1') {
-    const decoded = binaryToJson(String(body.payloadBinary || ''));
-    return {
-      event: decoded.event || body.event || 'unknown',
-      payload: decoded.payload || {},
-    };
-  }
-
-  return {
-    event: body.event || 'unknown',
-    payload: body.payload && typeof body.payload === 'object' ? body.payload : body,
-  };
-};
-
-const textValue = (value, fallback = 'Unknown') => {
-  const text = String(value ?? '').trim();
-  return text || fallback;
-};
-
-const buildScreenLine = (payload) => {
-  const screen = textValue(payload.screen, 'Unknown');
-  const type = textValue(payload.screenType, '');
-  return type ? `${screen} (${type})` : screen;
-};
-
-const formatWebsiteVisitMessage = (payload = {}) => [
-  '🌐 Website Visit Alert',
-  '',
-  `📅 Time: ${textValue(payload.localTime || payload.timestamp)}`,
-  `🔗 URL: ${textValue(payload.url)}`,
-  `📱 Device: ${textValue(payload.device)}`,
-  `💻 Browser: ${textValue(payload.browser)}`,
-  `📺 Screen: ${buildScreenLine(payload)}`,
-  `🔄 Referrer: ${textValue(payload.referrer, 'Direct visit')}`,
-  `🌍 Platform: ${textValue(payload.platform)}`,
-  '',
-  '👤 User opened the donation website!',
-].join('\n');
-
-const formatPaymentMessage = (payload = {}) => [
-  '💳 Payment Button Alert',
-  '',
-  `📅 Time: ${textValue(payload.localTime || payload.timestamp)}`,
-  `🏦 Method: ${textValue(payload.method)}`,
-  `💵 Amount: ${textValue(payload.amount)}`,
-  `🔗 URL: ${textValue(payload.url)}`,
-  '',
-  '👤 User tapped a payment button.',
-].join('\n');
-
-const buildTelegramMessage = (event, payload) => {
-  if (event === 'website_open') return formatWebsiteVisitMessage(payload);
-  if (event === 'payment_event') return formatPaymentMessage(payload);
-
-  return [
-    '🔔 Website Event',
+const buildTelegramMessage = (payload, request) => {
+  const screen = payload.screen || {};
+  const connection = payload.connection || {};
+  const ip = getClientIp(request);
+  const lines = [
+    '🌐 <b>Website Visit Alert</b>',
     '',
-    `Event: ${textValue(event)}`,
-    `Time: ${textValue(payload.localTime || payload.timestamp || new Date().toISOString())}`,
-  ].join('\n');
+    `📅 <b>Time:</b> ${escapeHtml(trimValue(payload.localTime || payload.timestamp))}`,
+    `🔗 <b>URL:</b> ${escapeHtml(trimValue(payload.url, 900))}`,
+    `↪️ <b>Referrer:</b> ${escapeHtml(trimValue(payload.referrer || 'Direct visit', 900))}`,
+    `📱 <b>Device:</b> ${escapeHtml(trimValue(payload.device))}`,
+    `💻 <b>Browser:</b> ${escapeHtml(trimValue(payload.browser))}`,
+    `🖥️ <b>Platform:</b> ${escapeHtml(trimValue(payload.platform))}`,
+    `📺 <b>Screen:</b> ${escapeHtml(`${screen.width || 0}x${screen.height || 0} @${screen.devicePixelRatio || 1}x`)}`,
+    `📐 <b>Viewport:</b> ${escapeHtml(`${screen.viewportWidth || 0}x${screen.viewportHeight || 0}`)}`,
+    `🌍 <b>Language:</b> ${escapeHtml(trimValue(payload.language))}`,
+    `🕒 <b>Timezone:</b> ${escapeHtml(trimValue(payload.timezone))}`,
+    `📶 <b>Network:</b> ${escapeHtml(trimValue(connection.effectiveType || 'Unknown'))}${connection.saveData ? ' / Save-Data' : ''}`,
+    `🔐 <b>IP:</b> ${escapeHtml(trimValue(ip))}`,
+    '',
+    '👤 User opened the donation website.',
+  ];
+
+  const message = lines.join('\n');
+  return message.length > MAX_TEXT_LENGTH ? `${message.slice(0, MAX_TEXT_LENGTH - 1)}…` : message;
 };
 
 const sendTelegramMessage = async (text) => {
@@ -147,70 +89,59 @@ const sendTelegramMessage = async (text) => {
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
   if (!token || !chatId) {
-    return {
-      ok: false,
-      configured: false,
-      message: 'Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID in Vercel environment variables.',
-    };
+    return { ok: false, status: 500, body: { ok: false, error: 'Telegram environment variables are missing.' } };
   }
 
-  const telegramPayload = {
-    chat_id: chatId,
-    text,
-    disable_web_page_preview: true,
-  };
-
-  if (process.env.TELEGRAM_MESSAGE_THREAD_ID) {
-    telegramPayload.message_thread_id = process.env.TELEGRAM_MESSAGE_THREAD_ID;
-  }
-
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  const response = await fetch(`${TELEGRAM_API_BASE}/bot${token}/sendMessage`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(telegramPayload),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    }),
   });
 
-  const data = await response.json().catch(() => ({}));
+  const result = await response.json().catch(() => ({}));
 
-  if (!response.ok || data.ok === false) {
-    return {
-      ok: false,
-      configured: true,
-      telegramStatus: response.status,
-      telegramDescription: data.description || 'Telegram sendMessage failed',
-    };
-  }
-
-  return { ok: true, configured: true, sent: 1 };
+  return {
+    ok: response.ok && result.ok !== false,
+    status: response.status,
+    body: result,
+  };
 };
 
-module.exports = async (req, res) => {
-  setCorsHeaders(req, res);
+module.exports = async function handler(request, response) {
+  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('Content-Type', 'application/json; charset=utf-8');
 
-  if (req.method === 'OPTIONS') {
-    res.statusCode = 204;
-    res.end();
+  if (request.method !== 'POST') {
+    response.setHeader('Allow', 'POST');
+    response.status(405).json({ ok: false, error: 'Method not allowed.' });
     return;
   }
 
-  if (req.method !== 'POST') {
-    jsonResponse(res, 405, { ok: false, error: 'Method not allowed' });
+  if (!isAllowedOrigin(request)) {
+    response.status(403).json({ ok: false, error: 'Origin not allowed.' });
     return;
   }
 
   try {
-    const body = await readRawBody(req);
-    const { event, payload } = extractEventPayload(body);
-    const text = buildTelegramMessage(event, payload);
-    const result = await sendTelegramMessage(text);
+    const payload = await parseBody(request);
+    const text = buildTelegramMessage(payload, request);
+    const telegram = await sendTelegramMessage(text);
 
-    // Return 200 even when Telegram env is missing so the donation page never
-    // breaks or retries aggressively. Check Vercel Function Logs if ok=false.
-    jsonResponse(res, 200, result);
+    if (!telegram.ok) {
+      const safeError = telegram.body?.description || telegram.body?.error || 'Telegram send failed.';
+      response.status(telegram.status || 500).json({ ok: false, error: safeError });
+      return;
+    }
+
+    response.status(200).json({ ok: true, sent: true });
   } catch (error) {
-    jsonResponse(res, 400, {
-      ok: false,
-      error: error.message || 'Invalid request',
-    });
+    response.status(400).json({ ok: false, error: error.message || 'Bad request.' });
   }
 };

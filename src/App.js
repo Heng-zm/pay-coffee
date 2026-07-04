@@ -4,13 +4,12 @@ import MoneyRain from './components/MoneyRain';
 import MainContent from './components/MainContent';
 import DonationsList from './components/DonationsList';
 import Footer from './components/Footer';
-import config, { validateConfig } from './config/config';
-import { sendWebsiteOpenNotification } from './services/telegramService';
+import { validateConfig } from './config/config';
+import { sendWebsiteOpenNotification } from './services/telegramVisitService';
 import './style.css';
 
 function App() {
-  const notificationSentRef = useRef(false);
-
+  const notificationStartedRef = useRef(false);
   const [isOnline, setIsOnline] = useState(() => (
     typeof navigator !== 'undefined' ? navigator.onLine : true
   ));
@@ -21,25 +20,15 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (notificationSentRef.current || !configValid) {
+    if (!configValid || notificationStartedRef.current) {
       return undefined;
     }
 
-    const notifyVisit = async () => {
-      notificationSentRef.current = true;
-      const ok = await sendWebsiteOpenNotification({
-        timestamp: new Date().toISOString(),
-        url: typeof window !== 'undefined' ? window.location.href : '',
-        referrer: typeof document !== 'undefined' && document.referrer ? document.referrer : 'Direct visit',
-      });
+    notificationStartedRef.current = true;
+    const timer = window.setTimeout(() => {
+      sendWebsiteOpenNotification().catch(() => undefined);
+    }, 700);
 
-      // Do not retry in the same page session. Visit notifications are optional;
-      // a backend/Telegram configuration problem must not cause repeated POSTs
-      // during React StrictMode or local development.
-      void ok;
-    };
-
-    const timer = window.setTimeout(notifyVisit, 900);
     return () => window.clearTimeout(timer);
   }, [configValid]);
 
@@ -71,7 +60,7 @@ function App() {
       )}
 
       <MainContent isOnline={isOnline} />
-      <DonationsList isOnline={isOnline} />
+      <DonationsList />
       <Footer />
     </div>
   );

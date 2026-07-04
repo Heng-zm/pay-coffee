@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from './QRCode';
 import PaymentButtons from './PaymentButtons';
 import config from '../config/config';
-import { sendPaymentNotification } from '../services/telegramService';
 
 const MainContent = ({ isOnline }) => {
   const [showThankYou, setShowThankYou] = useState(false);
@@ -35,15 +34,9 @@ const MainContent = ({ isOnline }) => {
     setShowThankYou(false);
     setPaymentMessage(method ? `Opening ${method} payment app...` : 'Opening payment app...');
 
-    // Static/no-server mode cannot verify payment completion.
-    // Keep this as a UI acknowledgement only and send an optional analytics event.
-    sendPaymentNotification({
-      method: method || 'Unknown',
-      timestamp: new Date().toLocaleString(),
-    }).catch(() => undefined);
-
     paymentTimeoutRef.current = window.setTimeout(() => {
       if (!mountedRef.current) return;
+
       setPaymentInProgress(false);
       setPaymentMessage('Payment app opened. Please complete the payment in your bank app.');
       setShowThankYou(true);
@@ -56,7 +49,6 @@ const MainContent = ({ isOnline }) => {
       }, 4500);
     }, 1800);
   }, [clearPaymentTimer, clearThankYouTimer]);
-
 
   useEffect(() => {
     if (!isOnline && paymentInProgress) {

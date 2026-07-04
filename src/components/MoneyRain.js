@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 
 const SYMBOLS = ['$', '៛'];
-const DEFAULT_MONEY_COUNT = 26;
-const TABLET_MONEY_COUNT = 18;
-const MOBILE_MONEY_COUNT = 14;
+const DEFAULT_MONEY_COUNT = 22;
+const TABLET_MONEY_COUNT = 16;
+const MOBILE_MONEY_COUNT = 10;
 
 const randomBetween = (min, max) => Math.random() * (max - min) + min;
 const randomPick = (items) => items[Math.floor(Math.random() * items.length)];
@@ -26,13 +26,13 @@ const getAnimationPreference = () => {
 
 const createMoneyItems = (count) => (
   Array.from({ length: count }, (_, index) => {
-    const size = Math.round(randomBetween(12, 28));
-    const duration = randomBetween(11, 24).toFixed(2);
-    const delay = randomBetween(-24, 0).toFixed(2);
-    const drift = Math.round(randomBetween(-46, 46));
-    const spin = Math.round(randomBetween(-220, 220));
-    const opacity = randomBetween(0.10, 0.24).toFixed(2);
-    const blur = randomBetween(0, 0.6).toFixed(2);
+    const size = Math.round(randomBetween(12, 26));
+    const duration = randomBetween(13, 26).toFixed(2);
+    const delay = randomBetween(-26, 0).toFixed(2);
+    const drift = Math.round(randomBetween(-44, 44));
+    const rotate = Math.round(randomBetween(-160, 160));
+    const opacity = randomBetween(0.08, 0.22).toFixed(2);
+    const blur = randomBetween(0, 0.5).toFixed(2);
 
     return {
       id: `money-${index}`,
@@ -42,10 +42,9 @@ const createMoneyItems = (count) => (
       duration: `${duration}s`,
       delay: `${delay}s`,
       drift: `${drift}px`,
-      spin: `${spin}deg`,
+      rotate: `${rotate}deg`,
       opacity,
       blur: `${blur}px`,
-      startScale: randomBetween(0.82, 1.12).toFixed(2),
     };
   })
 );
@@ -54,9 +53,7 @@ const MoneyRain = React.memo(() => {
   const { disabled, count } = useMemo(getAnimationPreference, []);
   const items = useMemo(() => createMoneyItems(count), [count]);
 
-  if (disabled || items.length === 0) {
-    return null;
-  }
+  if (disabled || items.length === 0) return null;
 
   return (
     <div className="money-rain optimized-money-rain" aria-hidden="true">
@@ -70,10 +67,9 @@ const MoneyRain = React.memo(() => {
             '--money-duration': item.duration,
             '--money-delay': item.delay,
             '--money-drift': item.drift,
-            '--money-spin': item.spin,
+            '--money-rotate': item.rotate,
             '--money-opacity': item.opacity,
             '--money-blur': item.blur,
-            '--money-start-scale': item.startScale,
           }}
         >
           {item.symbol}

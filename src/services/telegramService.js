@@ -1,23 +1,49 @@
 /**
- * Telegram + Supporters Service
+ * Telegram + Supporters service.
  *
- * Security note:
- * Never put a Telegram bot token in React/REACT_APP_* variables. This file sends
- * website events to the same-origin /api/website/visit endpoint. On Vercel, that
- * endpoint is a serverless function that keeps TELEGRAM_BOT_TOKEN private.
+ * Browser code never contains Telegram/Supabase secrets. It only calls
+ * same-origin API routes such as /api/website/visit and /api/supporters.
  */
 
 import config from '../config/config';
 
+const VISIT_EVENT_STORAGE_KEY = 'ozo_donation_visit_event_v2';
+const SUPPORTERS_CACHE_KEY = 'ozo_donation_supporters_cache_v2';
+const DEFAULT_REQUEST_TIMEOUT_MS = 8000;
+
 const safeWindow = () => (typeof window !== 'undefined' ? window : null);
 const safeNavigator = () => (typeof navigator !== 'undefined' ? navigator : null);
 const safeDocument = () => (typeof document !== 'undefined' ? document : null);
-
-const VISIT_EVENT_STORAGE_KEY = 'ozo_donation_visit_event';
-const SUPPORTERS_CACHE_KEY = 'ozo_donation_supporters_cache';
-const DEFAULT_REQUEST_TIMEOUT_MS = 8000;
-
 const nowIso = () => new Date().toISOString();
+
+const toPositiveNumber = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const getRequestTimeout = () => (
+  toPositiveNumber(config.api?.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS)
+);
+
+const readJson = (value, fallback = null) => {
+  if (!value) return fallback;
+
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return fallback;
+  }
+};
+
+const buildSessionId = () => {
+  const cryptoObj = safeWindow()?.crypto;
+
+  if (cryptoObj?.randomUUID) {
+    return cryptoObj.randomUUID();
+  }
+
+  return `visit-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
 
 const textEncoder = () => (typeof TextEncoder !== 'undefined' ? new TextEncoder() : null);
 
@@ -30,17 +56,19 @@ const jsonToBinaryString = (value) => {
   const encoder = textEncoder();
 
   if (encoder) {
+    const bytes = encoder.encode(json);
     return {
-      binary: bytesToBinaryString(encoder.encode(json)),
-      byteLength: encoder.encode(json).byteLength,
+      binary: bytesToBinaryString(bytes),
+      byteLength: bytes.byteLength,
       charLength: json.length,
     };
   }
 
-  // Legacy fallback for very old browsers. Modern browsers use TextEncoder
-  // above so Khmer/Unicode text is encoded safely as UTF-8 bytes.
+  // Legacy fallback for very old browsers. Modern browsers use TextEncoder,
+  // which safely preserves Khmer and other Unicode as UTF-8 bytes.
   const escaped = unescape(encodeURIComponent(json));
   const bytes = Array.from(escaped, (char) => char.charCodeAt(0));
+
   return {
     binary: bytesToBinaryString(bytes),
     byteLength: bytes.length,
@@ -48,11 +76,8 @@ const jsonToBinaryString = (value) => {
   };
 };
 
-const createBinaryPayloadEnvelope = (eventName, payload = {}) => {
-  const encoded = jsonToBinaryString({
-    event: eventName,
-    payload,
-  });
+export const createBinaryPayloadEnvelope = (eventName, payload = {}) => {
+  const encoded = jsonToBinaryString({ event: eventName, payload });
 
   return {
     event: eventName,
@@ -66,53 +91,34 @@ const createBinaryPayloadEnvelope = (eventName, payload = {}) => {
 
 const shouldUseBinaryPayload = () => Boolean(config.notifications?.binaryPayloadEnabled);
 
-const toPositiveNumber = (value, fallback) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const getRequestTimeout = () => (
-  toPositiveNumber(config.api?.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS)
-);
-
-const buildSessionId = () => {
-  const win = safeWindow();
-  const cryptoObj = win?.crypto;
-
-  if (cryptoObj?.randomUUID) {
-    return cryptoObj.randomUUID();
-  }
-
-  return `visit-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-};
-
-const readJson = (value, fallback = null) => {
-  try {
-    return JSON.parse(value);
-  } catch (_error) {
-    return fallback;
-  }
-};
-
 const shouldThrottleVisit = () => {
-  const win = safeWindow();
-  if (!win?.sessionStorage) return false;
+  const storage = safeWindow()?.sessionStorage;
+  if (!storage) return false;
 
   const cooldownMinutes = toPositiveNumber(config.notifications?.visitCooldownMinutes, 30);
   const cooldownMs = cooldownMinutes * 60 * 1000;
-  const cached = readJson(win.sessionStorage.getItem(VISIT_EVENT_STORAGE_KEY), null);
+  const cached = readJson(storage.getItem(VISIT_EVENT_STORAGE_KEY), null);
 
-  if (!cached?.sentAt) return false;
-  return Date.now() - Number(cached.sentAt) < cooldownMs;
+  return Boolean(cached?.sentAt && Date.now() - Number(cached.sentAt) < cooldownMs);
+};
+
+const markVisitSent = () => {
+  const storage = safeWindow()?.sessionStorage;
+  if (!storage) return;
+
+  try {
+    storage.setItem(VISIT_EVENT_STORAGE_KEY, JSON.stringify({ sentAt: Date.now() }));
+  } catch (_error) {
+    // Ignore private-mode storage errors.
+  }
 };
 
 const shouldUseBeacon = (url, options = {}) => {
-  if (!options.preferBeacon || !safeNavigator()?.sendBeacon || typeof Blob === 'undefined') {
+  const nav = safeNavigator();
+  if (!options.preferBeacon || !nav?.sendBeacon || typeof Blob === 'undefined') {
     return false;
   }
 
-  // Keep normal fetch as the default so backend errors are visible during
-  // development. Beacon is best only for fire-and-forget/unload-style events.
   if (config.debug) return false;
 
   const win = safeWindow();
@@ -126,21 +132,13 @@ const shouldUseBeacon = (url, options = {}) => {
   }
 };
 
-const markVisitSent = () => {
-  const win = safeWindow();
-  if (!win?.sessionStorage) return;
-
-  try {
-    win.sessionStorage.setItem(VISIT_EVENT_STORAGE_KEY, JSON.stringify({ sentAt: Date.now() }));
-  } catch (_error) {
-    // Ignore private-mode storage errors.
-  }
-};
-
 const timeoutFetch = async (url, options = {}, timeoutMs = getRequestTimeout()) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  if (typeof fetch !== 'function') {
+    throw new Error('Fetch API is not available in this browser.');
+  }
 
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   const externalSignal = options.signal;
   const abortFromExternalSignal = () => controller.abort();
 
@@ -158,7 +156,7 @@ const timeoutFetch = async (url, options = {}, timeoutMs = getRequestTimeout()) 
       signal: controller.signal,
     });
   } finally {
-    clearTimeout(timeoutId);
+    window.clearTimeout(timeoutId);
     if (externalSignal) {
       externalSignal.removeEventListener('abort', abortFromExternalSignal);
     }
@@ -188,13 +186,7 @@ const getNetworkInfo = () => {
 
 const getViewportInfo = () => {
   const win = safeWindow();
-  if (!win) {
-    return {
-      width: 0,
-      height: 0,
-      devicePixelRatio: 1,
-    };
-  }
+  if (!win) return { width: 0, height: 0, devicePixelRatio: 1 };
 
   return {
     width: win.innerWidth || 0,
@@ -205,7 +197,13 @@ const getViewportInfo = () => {
 
 const getLocaleInfo = () => {
   const nav = safeNavigator();
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Unknown';
+  let timezone = 'Unknown';
+
+  try {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Unknown';
+  } catch (_error) {
+    timezone = 'Unknown';
+  }
 
   return {
     language: nav?.language || 'Unknown',
@@ -238,23 +236,25 @@ const getDeviceInfo = (userAgent = '') => {
   } else if (userAgent.includes('iPhone OS') || userAgent.includes('CPU OS')) {
     const iosMatch = userAgent.match(/OS ([\d_]+)/);
     deviceInfo.platform = iosMatch ? `iOS ${iosMatch[1].replace(/_/g, '.')}` : 'iOS';
-  } else if (userAgent.includes('Linux')) deviceInfo.platform = 'Linux';
+  } else if (userAgent.includes('Linux')) {
+    deviceInfo.platform = 'Linux';
+  }
 
   if (userAgent.includes('Edg/')) {
-    const edgeMatch = userAgent.match(/Edg\/([\d.]+)/);
-    deviceInfo.browser = edgeMatch ? `Edge ${edgeMatch[1]}` : 'Edge';
+    const match = userAgent.match(/Edg\/([\d.]+)/);
+    deviceInfo.browser = match ? `Edge ${match[1]}` : 'Edge';
   } else if (userAgent.includes('OPR/')) {
-    const operaMatch = userAgent.match(/OPR\/([\d.]+)/);
-    deviceInfo.browser = operaMatch ? `Opera ${operaMatch[1]}` : 'Opera';
-  } else if (userAgent.includes('Chrome/')) {
-    const chromeMatch = userAgent.match(/Chrome\/([\d.]+)/);
-    deviceInfo.browser = chromeMatch ? `Chrome ${chromeMatch[1]}` : 'Chrome';
+    const match = userAgent.match(/OPR\/([\d.]+)/);
+    deviceInfo.browser = match ? `Opera ${match[1]}` : 'Opera';
   } else if (userAgent.includes('Firefox/')) {
-    const firefoxMatch = userAgent.match(/Firefox\/([\d.]+)/);
-    deviceInfo.browser = firefoxMatch ? `Firefox ${firefoxMatch[1]}` : 'Firefox';
-  } else if (userAgent.includes('Safari/') && !userAgent.includes('Chrome')) {
-    const safariMatch = userAgent.match(/Version\/([\d.]+)/);
-    deviceInfo.browser = safariMatch ? `Safari ${safariMatch[1]}` : 'Safari';
+    const match = userAgent.match(/Firefox\/([\d.]+)/);
+    deviceInfo.browser = match ? `Firefox ${match[1]}` : 'Firefox';
+  } else if (userAgent.includes('Chrome/')) {
+    const match = userAgent.match(/Chrome\/([\d.]+)/);
+    deviceInfo.browser = match ? `Chrome ${match[1]}` : 'Chrome';
+  } else if (userAgent.includes('Safari/')) {
+    const match = userAgent.match(/Version\/([\d.]+)/);
+    deviceInfo.browser = match ? `Safari ${match[1]}` : 'Safari';
   }
 
   if (userAgent.includes('iPhone')) deviceInfo.deviceName = 'iPhone';
@@ -322,7 +322,7 @@ export const createWebsiteVisitPayload = (visitInfo = {}) => {
   const locale = getLocaleInfo();
 
   return {
-    eventId: buildSessionId(),
+    eventId: visitInfo.eventId || buildSessionId(),
     timestamp: visitInfo.timestamp || nowIso(),
     localTime: locale.localTime,
     url: visitInfo.url || win?.location?.href || '',
@@ -348,9 +348,7 @@ export const sendNotificationEvent = async (eventName, payload = {}, options = {
   const endpoint = config.api?.endpoints?.notification;
 
   if (!config.notifications?.enabled || !endpoint) {
-    if (config.debug) {
-      console.info('Telegram notifications are disabled. Set REACT_APP_NOTIFICATIONS_ENABLED=true and deploy api/website/visit.js with TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.');
-    }
+    if (config.debug) console.info('Notifications disabled or notification endpoint missing.');
     return false;
   }
 
@@ -361,8 +359,6 @@ export const sendNotificationEvent = async (eventName, payload = {}, options = {
   const body = JSON.stringify(requestPayload);
 
   try {
-    // Beacon is optional. Normal fetch is preferred for local/separated backend
-    // development because it exposes HTTP errors and JSON response bodies.
     if (shouldUseBeacon(url, options)) {
       const blob = new Blob([body], { type: 'application/json' });
       const queued = safeNavigator().sendBeacon(url, blob);
@@ -378,7 +374,7 @@ export const sendNotificationEvent = async (eventName, payload = {}, options = {
       body,
       keepalive: Boolean(options.keepalive),
       credentials: config.api?.credentials || 'same-origin',
-    }, options.timeoutMs);
+    }, options.timeoutMs || config.notifications?.requestTimeoutMs || getRequestTimeout());
 
     if (!response.ok) {
       throw new Error(`Notification endpoint returned ${response.status}`);
@@ -386,29 +382,24 @@ export const sendNotificationEvent = async (eventName, payload = {}, options = {
 
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
-      // HTTP 200 means the backend endpoint was reached. Even when Telegram is
-      // not configured yet and the JSON says { ok: false }, do not treat it as
-      // a network/runtime failure. This prevents React StrictMode/local dev from
-      // retrying and spamming the console with repeated visit notifications.
-      const json = await response.json();
-      return json || true;
+      return await response.json();
     }
 
     return true;
   } catch (error) {
-    if (config.debug) {
-      console.error('Error sending Telegram notification event:', error);
-    } else {
-      console.warn('Telegram notification failed:', error.message);
-    }
+    const message = error?.name === 'AbortError'
+      ? 'Telegram notification timed out.'
+      : error?.message || 'Telegram notification failed.';
+
+    if (config.debug) console.error(message, error);
+    else console.warn(message);
+
     return false;
   }
 };
 
 export const sendWebsiteOpenNotification = async (visitInfo = {}) => {
-  if (shouldThrottleVisit()) {
-    return true;
-  }
+  if (shouldThrottleVisit()) return true;
 
   const payload = createWebsiteVisitPayload(visitInfo);
   const result = await sendNotificationEvent('website_open', payload, {
@@ -417,14 +408,10 @@ export const sendWebsiteOpenNotification = async (visitInfo = {}) => {
     timeoutMs: config.notifications?.requestTimeoutMs || getRequestTimeout(),
   });
 
-  if (result) {
-    markVisitSent();
-  }
-
+  if (result) markVisitSent();
   return result;
 };
 
-// Backward-compatible name used by older App.js versions.
 export const sendVisitNotification = sendWebsiteOpenNotification;
 
 export const sendPaymentNotification = async (paymentInfo = {}) => {
@@ -442,13 +429,20 @@ export const sendPaymentNotification = async (paymentInfo = {}) => {
   });
 };
 
+const parseAmount = (value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const cleaned = String(value ?? '0').replace(/[^0-9.-]/g, '');
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const normalizeSupporter = (item, index) => {
   if (!item || typeof item !== 'object') return null;
 
-  const name = String(item.name || item.fullName || item.display_name || '').trim();
-  const amount = Number(item.amount ?? item.total ?? item.value ?? 0);
+  const name = String(item.name || item.fullName || item.display_name || item.username || '').trim();
+  const amount = parseAmount(item.amount ?? item.total ?? item.value ?? item.donation_amount ?? 0);
 
-  if (!name || !Number.isFinite(amount)) return null;
+  if (!name || amount < 0) return null;
 
   return {
     id: item.id || item.user_id || item.telegram_id || `${name}-${amount}-${index}`,
@@ -460,11 +454,11 @@ const normalizeSupporter = (item, index) => {
 };
 
 const writeSupportersCache = (supporters) => {
-  const win = safeWindow();
-  if (!win?.localStorage) return;
+  const storage = safeWindow()?.localStorage;
+  if (!storage) return;
 
   try {
-    win.localStorage.setItem(SUPPORTERS_CACHE_KEY, JSON.stringify({
+    storage.setItem(SUPPORTERS_CACHE_KEY, JSON.stringify({
       timestamp: Date.now(),
       supporters,
     }));
@@ -473,16 +467,19 @@ const writeSupportersCache = (supporters) => {
   }
 };
 
-export const readSupportersCache = () => {
-  const win = safeWindow();
-  if (!win?.localStorage) return [];
+export const readSupportersCache = ({ ignoreAge = false } = {}) => {
+  const storage = safeWindow()?.localStorage;
+  if (!storage) return [];
 
-  try {
-    const cached = readJson(win.localStorage.getItem(SUPPORTERS_CACHE_KEY), null);
-    return Array.isArray(cached?.supporters) ? cached.supporters : [];
-  } catch (_error) {
+  const cached = readJson(storage.getItem(SUPPORTERS_CACHE_KEY), null);
+  if (!Array.isArray(cached?.supporters)) return [];
+
+  const maxAgeMs = config.app?.supportersCacheMaxAgeMs || 6 * 60 * 60 * 1000;
+  if (!ignoreAge && cached.timestamp && Date.now() - Number(cached.timestamp) > maxAgeMs) {
     return [];
   }
+
+  return cached.supporters;
 };
 
 const extractSupporterRows = (data) => {
@@ -502,11 +499,9 @@ export const fetchSupporters = async ({ signal, allowCache = true } = {}) => {
     const response = await timeoutFetch(url, {
       method: 'GET',
       signal,
-      cache: 'no-cache',
+      cache: 'no-store',
       credentials: config.api?.credentials || 'same-origin',
-      headers: {
-        Accept: 'application/json',
-      },
+      headers: { Accept: 'application/json' },
     });
 
     if (!response.ok) {
@@ -529,13 +524,11 @@ export const fetchSupporters = async ({ signal, allowCache = true } = {}) => {
     writeSupportersCache(supporters);
     return supporters;
   } catch (error) {
-    if (error.name === 'AbortError') throw error;
+    if (error?.name === 'AbortError') throw error;
 
     if (allowCache) {
-      const cached = readSupportersCache();
-      if (cached.length > 0) {
-        return cached;
-      }
+      const cached = readSupportersCache({ ignoreAge: true });
+      if (cached.length > 0) return cached;
     }
 
     throw error;
@@ -551,6 +544,7 @@ export const getApiDebugInfo = () => ({
 });
 
 const telegramService = {
+  createBinaryPayloadEnvelope,
   createWebsiteVisitPayload,
   sendNotificationEvent,
   sendWebsiteOpenNotification,

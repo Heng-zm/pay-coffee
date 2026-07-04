@@ -19,11 +19,7 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
-
-    this.setState({
-      error,
-      errorInfo,
-    });
+    this.setState({ error, errorInfo });
   }
 
   handleRefresh = () => {
@@ -32,16 +28,13 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
-      const errorMessage = this.state.error
-        ? this.state.error.toString()
-        : 'Unknown error';
-
+      const errorMessage = this.state.error ? this.state.error.toString() : 'Unknown error';
       const componentStack = this.state.errorInfo?.componentStack || '';
 
       return (
         <div className="error-boundary" role="alert">
           <div className="error-boundary-content">
-            <h2>Something went wrong</h2>
+            <h1>Something went wrong</h1>
             <p>Please refresh the page and try again.</p>
 
             <button

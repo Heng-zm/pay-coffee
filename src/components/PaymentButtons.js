@@ -94,9 +94,7 @@ const PaymentButtons = React.memo(({ onPaymentStart, paymentInProgress, isOnline
   }, [isOnline, paymentInProgress]);
 
   const handleButtonClick = useCallback((bank) => {
-    if (onPaymentStart) {
-      onPaymentStart({ method: bank.method });
-    }
+    onPaymentStart?.({ method: bank.method });
   }, [onPaymentStart]);
 
   return (

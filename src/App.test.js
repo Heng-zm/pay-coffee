@@ -1,99 +1,88 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 
-const mockSupporters = [
-  { id: 1, name: 'Alice', amount: 5 },
-  { id: 2, name: 'Bob', amount: 10 },
-];
-
 beforeEach(() => {
+  jest.useFakeTimers();
   window.localStorage.clear();
   window.sessionStorage.clear();
 
-  global.fetch = jest.fn((url, options = {}) => {
-    const method = String(options.method || 'GET').toUpperCase();
-
-    if (method === 'POST' && String(url).includes('/api/website/visit')) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ ok: true, sent: 1 }),
-        headers: new Headers({ 'content-type': 'application/json' }),
-      });
-    }
-
-    return Promise.resolve({
-      ok: true,
-      json: () => Promise.resolve({ ok: true, supporters: mockSupporters }),
-      headers: new Headers({ 'content-type': 'application/json' }),
-    });
-  });
+  global.fetch = jest.fn(() => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({ ok: true, sent: true }),
+  }));
 });
 
 afterEach(() => {
+  jest.runOnlyPendingTimers();
+  jest.useRealTimers();
   jest.clearAllMocks();
 });
 
-test('renders QR payment app correctly', async () => {
+const renderLoadedApp = async () => {
   render(<App />);
-  const qrImage = await screen.findByAltText(/Scan to pay QR Code/i);
+
+  act(() => {
+    jest.advanceTimersByTime(120);
+  });
+
+  return screen.findByAltText(/Payment QR code/i);
+};
+
+test('renders QR payment app correctly', async () => {
+  const qrImage = await renderLoadedApp();
   expect(qrImage).toBeInTheDocument();
 });
 
+test('removes the old hero copy above the QR code', async () => {
+  await renderLoadedApp();
+
+  expect(screen.queryByText(/Support Creator/i)).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: /Scan QR Code/i })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Recipient:/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Ozo\. Designer/i)).not.toBeInTheDocument();
+});
+
 test('renders all payment buttons', async () => {
-  render(<App />);
-  expect(await screen.findByText(/ABA PAY/i)).toBeInTheDocument();
-  expect(await screen.findByText(/ACLEDA PAY/i)).toBeInTheDocument();
-  expect(await screen.findByText(/WING PAY/i)).toBeInTheDocument();
+  await renderLoadedApp();
+  expect(screen.getByText(/ABA PAY/i)).toBeInTheDocument();
+  expect(screen.getByText(/ACLEDA PAY/i)).toBeInTheDocument();
+  expect(screen.getByText(/WING PAY/i)).toBeInTheDocument();
 });
 
 test('renders contact section', async () => {
-  render(<App />);
-  expect(await screen.findByText(/Contact/i)).toBeInTheDocument();
+  await renderLoadedApp();
+  expect(screen.getByText(/Contact/i)).toBeInTheDocument();
 });
 
-
-
 test('does not render an expiry timer', async () => {
-  render(<App />);
-  await screen.findByAltText(/Scan to pay QR Code/i);
+  await renderLoadedApp();
   expect(screen.queryByRole('timer')).not.toBeInTheDocument();
   expect(screen.queryByText(/Expired/i)).not.toBeInTheDocument();
 });
 
-test('loads and sorts supporter list from backend response', async () => {
-  render(<App />);
+test('sends website visit notification through Vercel API only', async () => {
+  await renderLoadedApp();
 
-  await waitFor(() => {
-    expect(screen.getByText('Bob')).toBeInTheDocument();
-    expect(screen.getByText('Alice')).toBeInTheDocument();
+  act(() => {
+    jest.advanceTimersByTime(800);
   });
 
-  expect(screen.getByText('$15.00')).toBeInTheDocument();
-  expect(global.fetch).toHaveBeenCalledWith(
-    expect.stringContaining('/api/supporters'),
-    expect.objectContaining({ method: 'GET' })
-  );
-});
-
-test('sends website visit notification as binary payload', async () => {
-  render(<App />);
-
   await waitFor(() => {
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/website/visit'),
-      expect.objectContaining({ method: 'POST' })
-    );
-  }, { timeout: 3000 });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
 
-  const visitCall = global.fetch.mock.calls.find(([url, options]) => (
-    String(url).includes('/api/website/visit') &&
-    String(options?.method || '').toUpperCase() === 'POST'
-  ));
+  expect(global.fetch).toHaveBeenCalledWith(
+    '/api/website/visit',
+    expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      body: expect.any(String),
+    })
+  );
 
-  expect(visitCall).toBeTruthy();
-  const body = JSON.parse(visitCall[1].body);
-  expect(body.encrypted).toBe(true);
-  expect(body.encryption).toBe('binary-json-v1');
-  expect(body.payloadBinary).toMatch(/^[01]+$/);
-  expect(body.payload).toBeUndefined();
+  const [, options] = global.fetch.mock.calls[0];
+  const body = JSON.parse(options.body);
+  expect(body.event).toBe('website_visit');
+  expect(body.url).toEqual(expect.any(String));
+  expect(body.browser).toEqual(expect.any(String));
 });

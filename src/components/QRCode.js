@@ -12,7 +12,7 @@ const QRCode = React.memo(() => {
         <img
           className="qr-code-img"
           src={qrCodeUrl}
-          alt="Scan to pay QR Code"
+          alt="Payment QR code"
           width="360"
           height="360"
           fetchPriority="high"

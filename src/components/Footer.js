@@ -6,7 +6,6 @@ const CONTACT_ITEMS = [
     key: 'facebook',
     href: config.social?.facebook || '#',
     icon: config.assets?.getImageUrl?.('facebook') || '/facebook.png',
-    alt: 'Facebook',
     label: 'Facebook',
     fallback: 'f',
   },
@@ -14,7 +13,6 @@ const CONTACT_ITEMS = [
     key: 'telegramBot',
     href: config.social?.telegramBot || '#',
     icon: config.assets?.getImageUrl?.('telegramBot') || '/telegram-bot.png',
-    alt: 'Telegram Bot',
     label: 'Telegram Bot',
     fallback: '🤖',
   },
@@ -22,7 +20,6 @@ const CONTACT_ITEMS = [
     key: 'telegramChannel',
     href: config.social?.telegramChannel || '#',
     icon: config.assets?.getImageUrl?.('telegramChannel') || '/telegram-channel.png',
-    alt: 'Telegram Channel',
     label: 'Telegram Channel',
     fallback: '📣',
   },
@@ -30,7 +27,6 @@ const CONTACT_ITEMS = [
     key: 'telegramPersonal',
     href: config.social?.telegramPersonal || 'https://t.me/m11mmm112',
     icon: config.assets?.getImageUrl?.('telegramPersonal') || '/telegram-personal.png',
-    alt: 'Telegram Personal Account',
     label: 'Telegram Personal Account',
     fallback: '👤',
   },
@@ -38,7 +34,6 @@ const CONTACT_ITEMS = [
     key: 'behance',
     href: config.social?.behance || 'https://www.behance.net/anhheng',
     icon: config.assets?.getImageUrl?.('behance') || '/behance.png',
-    alt: 'Behance',
     label: 'Behance',
     fallback: 'Be',
   },
@@ -97,18 +92,16 @@ const FooterIcon = ({ item }) => {
   );
 };
 
-const Footer = React.memo(() => {
-  return (
-    <footer className="footer-social icon-only-footer">
-      <div className="footer-label">Contact</div>
-      <div className="footer-links icon-only-links">
-        {CONTACT_ITEMS.map((item) => (
-          <FooterIcon key={item.key} item={item} />
-        ))}
-      </div>
-    </footer>
-  );
-});
+const Footer = React.memo(() => (
+  <footer className="footer-social icon-only-footer">
+    <div className="footer-label">Contact</div>
+    <div className="footer-links icon-only-links">
+      {CONTACT_ITEMS.map((item) => (
+        <FooterIcon key={item.key} item={item} />
+      ))}
+    </div>
+  </footer>
+));
 
 Footer.displayName = 'Footer';
 
